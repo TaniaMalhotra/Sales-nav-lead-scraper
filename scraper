@@ -1,0 +1,84 @@
+const PAGES_TO_SCRAPE = 6;
+const PAGE_DELAY = 5000;
+
+const navigateToNextPage = () => {
+  const nextBtn = document.querySelector("[aria-label=Next]");
+  if (nextBtn) {
+    nextBtn.click();
+  }
+};
+
+const scrollToBottom = () => {
+  const container = document.querySelector("#search-results-container");
+  container.scrollTo({
+    top: container.scrollHeight,
+    behavior: "smooth",
+  });
+};
+
+const convertJsonToCsv = (jsonData) => {
+  const headers = Object.keys(jsonData[0]);
+  const csvContent = [];
+
+  csvContent.push(headers.join(","));
+
+  jsonData.forEach((item) => {
+    const row = headers.map((header) => item[header]);
+    csvContent.push(row.join(","));
+  });
+
+  return csvContent.join("\n");
+};
+
+const saveCsvFile = (csvContent) => {
+  const blob = new Blob([csvContent], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.style.display = "none";
+  anchor.href = url;
+  anchor.download = "data.csv";
+  document.body.appendChild(anchor);
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const sanitizeString = (str) => {
+  return JSON.stringify(str?.replace(/(\r\n|\n|\r)/gm, "").trim());
+};
+
+const scrapeData = async () => {
+  let collectedData = [];
+
+  for (let pageIndex = 0; pageIndex < PAGES_TO_SCRAPE; pageIndex++) {
+    console.log(`Scraping page: ${pageIndex + 1}`);
+
+    await wait(PAGE_DELAY);
+    scrollToBottom();
+    const items = document.querySelectorAll(".artdeco-list__item");
+    await wait(2000);
+
+    items.forEach((item) => {
+      collectedData.push({
+        name: sanitizeString(item.querySelector("[data-anonymize=person-name]")?.innerText),
+        title: sanitizeString(item.querySelector("[data-anonymize=title]")?.innerText),
+        location: sanitizeString(item.querySelector("[data-anonymize=location]")?.innerText),
+        companyName: sanitizeString(item.querySelector("[data-anonymize=company-name]")?.innerText),
+        linkedinUrl: JSON.stringify(item.querySelector("[data-control-name=view_lead_panel_via_search_lead_name]")?.href || ""),
+        imgUrl: JSON.stringify(item.querySelector("img")?.src || ""),
+        page: JSON.stringify(pageIndex + 1),
+      });
+    });
+    await wait(1000);
+    if (pageIndex < PAGES_TO_SCRAPE - 1) {
+      navigateToNextPage();
+    }
+    await wait(2000);
+  }
+  console.log(`Scraping Completed! ${collectedData.length} results found. Downloading CSV...`);
+  const csvContent = convertJsonToCsv(collectedData);
+  saveCsvFile(csvContent);
+};
+
+scrapeData();
